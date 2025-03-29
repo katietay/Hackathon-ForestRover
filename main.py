@@ -6,17 +6,22 @@ from robot_class import Robot
 import os
 import random
 from algorithm import Algorithm
-
+import rasterio
 
 # main.py
 def main():
     pygame.init()
     
-    # Updated Grid settings for smaller cells but more spaces
+    """ # Updated Grid settings for smaller cells but more spaces
     GRID_SIZE = 20  # Smaller grid cells (changed from 32)
     GRID_WIDTH = 40  # More horizontal spaces
-    GRID_HEIGHT = 30  # More vertical spaces
-
+    GRID_HEIGHT = 30  # More vertical spaces"""
+    with rasterio.open("masked_output_chunk_4096_4608.tiff") as src:
+        tif_data = src.read(1)
+        print(tif_data[1])
+        GRID_WIDTH, GRID_HEIGHT = tif_data.shape
+    
+    GRID_SIZE = min(800 // GRID_WIDTH, 600 // GRID_HEIGHT)
     WINDOW_SIZE = (GRID_WIDTH * GRID_SIZE, GRID_HEIGHT * GRID_SIZE)  # 800x600 window
     screen = pygame.display.set_mode(WINDOW_SIZE)
     pygame.display.set_caption("Robot Pathfinding with Elevation")
