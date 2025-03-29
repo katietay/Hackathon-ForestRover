@@ -1,136 +1,199 @@
+# algorithm.py
+import numpy as np
 import heapq
-import math
-from typing import List, Tuple, Dict
+import pygame
 
 class Algorithm:
     def __init__(self):
-        # 8-directional movement: horizontal, vertical, and diagonal
-        self.directions = [
-            (0, 1),   # right
-            (1, 0),   # down
-            (0, -1),  # left
-            (-1, 0),  # up
-            (1, 1),   # down-right
-            (-1, 1),  # up-right
-            (1, -1),  # down-left
-            (-1, -1)  # up-left
-        ]
+        self.elevation_profile = []
+        self.max_slope = 45  # Maximum slope in degrees
+        self.cliff_threshold = 1.0  # Minimum elevation drop to be considered a cliff
+        # Store all impassable cells (too steep) for visualization
+        self.impassable_cells = set()
+        
+    def calculate_impassable_terrain(self, grid):
+        """Pre-calculate all cells that are impassable due to steep slopes"""
+        self.impassable_cells.clear()
+        
+        # Loop through all grid cells
+        for x in range(grid.shape[0]):
+            for y in range(grid.shape[1]):
+                # Skip cells that are already obstacles
+                if grid[x, y, 0] == 1:
+                    continue
+                    
+                # Check all neighbors
+                directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+                for dx, dy in directions:
+                    nx, ny = x + dx, y + dy
+                    # Check if neighbor is in bounds
+                    if (0 <= nx < grid.shape[0] and 0 <= ny < grid.shape[1]):
+                        # Calculate slope
+                        elev1 = grid[x, y, 1]
+                        elev2 = grid[nx, ny, 1]
+                        elevation_diff = abs(elev2 - elev1)
+                        distance = 1.0
+                        slope = np.degrees(np.arctan2(elevation_diff, distance))
+                        
+                        # If slope is too steep in any direction, mark cell as impassable
+                        if slope > self.max_slope:
+                            self.impassable_cells.add((x, y))
+                            break
+        
+        return self.impassable_cells
 
-    def heuristic(self, a: Tuple[int, int], b: Tuple[int, int]) -> float:
-        """Euclidean distance heuristic"""
-        return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
-
-    def get_neighbors(self, pos: Tuple[int, int], grid: List[List[int]]) -> List[Tuple[int, int]]:
-        """Returns valid neighboring positions"""
+    def get_neighbors(self, pos, grid):
         neighbors = []
-        for dx, dy in self.directions:
+        # Only cardinal directions (remove diagonals for simpler movement)
+        directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+        
+        for dx, dy in directions:
             new_x, new_y = pos[0] + dx, pos[1] + dy
             
-            # Check if position is within grid bounds and not an obstacle
-            if (0 <= new_x < len(grid) and 
-                0 <= new_y < len(grid[0]) and 
-                grid[new_x][new_y] != 1):
+            # Check bounds
+            if (0 <= new_x < grid.shape[0] and 
+                0 <= new_y < grid.shape[1]):
                 
-                # For diagonal movements, check if both adjacent cells are free
-                if dx != 0 and dy != 0:
-                    if grid[pos[0]][pos[1] + dy] == 1 or grid[pos[0] + dx][pos[1]] == 1:
-                        continue  # Skip if diagonal movement is blocked
+                # Skip if it's an obstacle or in impassable cells list
+                if grid[new_x, new_y, 0] == 1 or (new_x, new_y) in self.impassable_cells:
+                    continue
                 
-                neighbors.append((new_x, new_y))
+                # Check slope between current and new cell
+                current_elevation = grid[pos[0], pos[1], 1]
+                new_elevation = grid[new_x, new_y, 1]
+                
+                # Calculate elevation difference
+                elevation_diff = new_elevation - current_elevation
+                
+                # Calculate slope in degrees
+                distance = 1.0  # Since we're only using cardinal directions
+                slope = np.degrees(np.arctan2(abs(elevation_diff), distance))
+                
+                # Check if slope is navigable (not too steep)
+                if slope <= self.max_slope:
+                    # Extra check for downward cliffs
+                    if elevation_diff < 0 and abs(elevation_diff) > self.cliff_threshold:
+                        # This is a significant drop - check if it's too steep to go down
+                        downward_slope = np.degrees(np.arctan2(abs(elevation_diff), distance))
+                        if downward_slope <= self.max_slope:
+                            neighbors.append((new_x, new_y))
+                    else:
+                        # Normal traversable terrain
+                        neighbors.append((new_x, new_y))
+        
         return neighbors
 
-    def get_movement_cost(self, current: Tuple[int, int], next_pos: Tuple[int, int]) -> float:
-        """Calculate movement cost between adjacent cells"""
-        dx = abs(current[0] - next_pos[0])
-        dy = abs(current[1] - next_pos[1])
+    def get_slope(self, pos1, pos2, grid):
+        """Calculate slope between two positions"""
+        dx = pos2[0] - pos1[0]
+        dy = pos2[1] - pos1[1]
+        distance = np.sqrt(dx*dx + dy*dy)
         
-        # Diagonal movement costs sqrt(2), orthogonal movement costs 1
-        return math.sqrt(2) if dx == 1 and dy == 1 else 1.0
+        if distance == 0:
+            return 0
+            
+        elevation_diff = grid[pos2[0], pos2[1], 1] - grid[pos1[0], pos1[1], 1]
+        return np.degrees(np.arctan2(abs(elevation_diff), distance))
 
-    def find_path(self, start: Tuple[int, int], goal: Tuple[int, int], 
-                  grid: List[List[int]]) -> List[Tuple[int, int]]:
-        """A* pathfinding algorithm using Euclidean distance"""
+    def heuristic(self, a, b):
+        """A* heuristic"""
+        return np.sqrt((b[0] - a[0])**2 + (b[1] - a[1])**2)
+
+    def find_path(self, start, goal, grid):
+        """Find a path using A* algorithm, avoiding steep terrain"""
+        # First, calculate impassable terrain based on slopes
+        self.calculate_impassable_terrain(grid)
+        
+        # If start or goal is in impassable terrain, return None
+        if start in self.impassable_cells or goal in self.impassable_cells:
+            print(f"Start {start} or goal {goal} is in impassable terrain!")
+            return None
+            
+        # Standard A* implementation
         frontier = []
         heapq.heappush(frontier, (0, start))
-        came_from: Dict[Tuple[int, int], Tuple[int, int]] = {}
-        cost_so_far: Dict[Tuple[int, int], float] = {}
-        came_from[start] = None
-        cost_so_far[start] = 0
-
+        came_from = {start: None}
+        cost_so_far = {start: 0}
+        
         while frontier:
             current = heapq.heappop(frontier)[1]
-
+            
             if current == goal:
                 break
-
+                
             for next_pos in self.get_neighbors(current, grid):
-                new_cost = cost_so_far[current] + self.get_movement_cost(current, next_pos)
-
+                # Calculate new cost including elevation difference
+                elevation_diff = abs(grid[next_pos[0], next_pos[1], 1] - 
+                                  grid[current[0], current[1], 1])
+                
+                # Higher penalty for going uphill vs downhill
+                if grid[next_pos[0], next_pos[1], 1] > grid[current[0], current[1], 1]:
+                    # Going uphill - higher cost
+                    movement_cost = 1 + elevation_diff * 0.8
+                else:
+                    # Going downhill - lower cost but still some penalty
+                    movement_cost = 1 + elevation_diff * 0.3
+                
+                new_cost = cost_so_far[current] + movement_cost
+                
                 if next_pos not in cost_so_far or new_cost < cost_so_far[next_pos]:
                     cost_so_far[next_pos] = new_cost
                     priority = new_cost + self.heuristic(goal, next_pos)
                     heapq.heappush(frontier, (priority, next_pos))
                     came_from[next_pos] = current
-
-        # Reconstruct path
-        current = goal
-        path = []
         
-        # If goal was never reached, return empty path
+        # Reconstruct path
         if goal not in came_from:
-            return []
+            print(f"No path found from {start} to {goal}!")
+            return None
             
+        path = []
+        current = goal
         while current is not None:
             path.append(current)
-            current = came_from.get(current)
-        
+            current = came_from[current]
         path.reverse()
+        
+        # Store elevation profile for visualization
+        self.elevation_profile = [(pos, grid[pos[0], pos[1], 1]) for pos in path]
+        
         return path
 
-    def smooth_path(self, path: List[Tuple[int, int]], grid: List[List[int]]) -> List[Tuple[int, int]]:
-        """Optional: Smooth the path to make it more natural"""
-        if len(path) < 3:
-            return path
-
-        smoothed = [path[0]]
-        current_idx = 0
-
-        while current_idx < len(path) - 1:
-            # Look ahead as far as possible for direct line of sight
-            for look_ahead in range(len(path) - 1, current_idx, -1):
-                if self.has_line_of_sight(path[current_idx], path[look_ahead], grid):
-                    smoothed.append(path[look_ahead])
-                    current_idx = look_ahead
-                    break
-            current_idx += 1
-
-        return smoothed
-
-    def has_line_of_sight(self, start: Tuple[int, int], end: Tuple[int, int], 
-                         grid: List[List[int]]) -> bool:
-        """Check if there's a clear line of sight between two points"""
-        x0, y0 = start
-        x1, y1 = end
-        dx = abs(x1 - x0)
-        dy = abs(y1 - y0)
-        x = x0
-        y = y0
-        n = 1 + dx + dy
-        x_inc = 1 if x1 > x0 else -1
-        y_inc = 1 if y1 > y0 else -1
-        error = dx - dy
-        dx *= 2
-        dy *= 2
-
-        for _ in range(n):
-            if grid[int(x)][int(y)] == 1:
-                return False
+    def draw_elevation_profile(self, screen, x, y, width, height, grid):
+        """Visualize the elevation profile of the current path"""
+        if not self.elevation_profile:
+            return
+            
+        # Draw background
+        pygame.draw.rect(screen, (255, 255, 255), (x, y, width, height))
+        pygame.draw.rect(screen, (0, 0, 0), (x, y, width, height), 1)
+        
+        # Get elevation range
+        elevations = [e for _, e in self.elevation_profile]
+        min_elevation = min(elevations)
+        max_elevation = max(elevations)
+        elevation_range = max_elevation - min_elevation or 1
+        
+        # Draw profile
+        points = []
+        for i, (_, elevation) in enumerate(self.elevation_profile):
+            px = x + (i / (len(self.elevation_profile)-1)) * width
+            py = y + height - ((elevation - min_elevation) / elevation_range) * height
+            points.append((int(px), int(py)))
+            
+        if len(points) > 1:
+            pygame.draw.lines(screen, (0, 0, 255), False, points, 2)
+            
+            # Mark steep sections
+            for i in range(len(points)-1):
+                pos1 = self.elevation_profile[i][0]
+                pos2 = self.elevation_profile[i+1][0]
                 
-            if error > 0:
-                x += x_inc
-                error -= dy
-            else:
-                y += y_inc
-                error += dx
-
-        return True
+                # Calculate slope
+                slope = self.get_slope(pos1, pos2, grid)
+                
+                if slope > self.max_slope * 0.8:  # Warning for slopes near maximum
+                    # Draw a warning marker
+                    mid_x = (points[i][0] + points[i+1][0]) // 2
+                    mid_y = (points[i][1] + points[i+1][1]) // 2
+                    pygame.draw.circle(screen, (255, 0, 0), (mid_x, mid_y), 4)
