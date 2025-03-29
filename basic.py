@@ -316,7 +316,7 @@ def save_path_to_file(path_coords, output_file):
 # Main function to demonstrate usage
 def main():
     # Replace with your TIFF file path
-    file_path = "starter_code_nasa\masked_output_chunk_4096_4608.tiff"
+    file_path = "Hackathon-ForestRover\masked_output_chunk_4096_4608.tiff"
     
     # Load the TIFF file (using PIL by default, can change to "tifffile")
     tiff_data = load_tiff(file_path, library="PIL")

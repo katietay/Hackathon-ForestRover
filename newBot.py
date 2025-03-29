@@ -65,8 +65,48 @@ def find_closest_path_point(position, path):
             closest_index = i
             
     return closest_index
+# Add these new functions after your existing functions but before main()
+def find_target_path_point(click_position, path):
+    """
+    Find the nearest point on path to clicked position and calculate shortest path
+    """
+    min_dist = float('inf')
+    closest_index = 0
+    closest_point = None
+    
+    # Find closest point on path to click position
+    for i, point in enumerate(path):
+        dist = sqrt((click_position[0] - point[0])**2 + 
+                   (click_position[1] - point[1])**2)
+        if dist < min_dist:
+            min_dist = dist
+            closest_index = i
+            closest_point = point
+            
+    return closest_index, closest_point, min_dist
+def find_shortest_path(path, start_index, end_index):
+    """
+    Determine the shortest direction to traverse the path
+    Returns the path points in the correct order
+    """
+    # Get path length in both directions
+    forward_path = path[start_index:end_index + 1]
+    backward_path = path[end_index:start_index - 1:-1] if start_index > 0 else path[end_index::-1]
+    
+    # Calculate total distance for both directions
+    def calculate_path_distance(path_points):
+        distance = 0
+        for i in range(len(path_points) - 1):
+            dx = path_points[i+1][0] - path_points[i][0]
+            dy = path_points[i+1][1] - path_points[i][1]
+            distance += sqrt(dx**2 + dy**2)
+        return distance
+    
+    forward_distance = calculate_path_distance(forward_path)
+    backward_distance = calculate_path_distance(backward_path)
+    
+    return forward_path if forward_distance <= backward_distance else backward_path
 
-# Main function
 def main():
     # Load and scale path
     original_path = load_path("extracted_path.csv")
@@ -76,89 +116,68 @@ def main():
         print("No path found in CSV file")
         return
     
-    # Set start and destination points (can be specified by user)
-    # Example: First 1/4 and last 1/4 of path
-    start_point = path[len(path) // 4]
-    destination_point = path[3 * len(path) // 4]
-    
-    # Allow user to adjust start and destination
+    # Initialize pygame components
     font = pygame.font.SysFont(None, 24)
-    adjusting = True
-    dragging_start = False
-    dragging_destination = False
     
-    while adjusting:
+    # Phase 1: Target Selection
+    selecting_target = True
+    start_point = None
+    end_point = None
+    shortest_path = None
+    
+    while selecting_target:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 return
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                click_pos = pygame.mouse.get_pos()
+                if start_point is None:
+                    # First click sets start point
+                    _, closest_point, _ = find_target_path_point(click_pos, path)
+                    start_point = closest_point
+                else:
+                    # Second click sets end point and ends selection
+                    _, closest_point, _ = find_target_path_point(click_pos, path)
+                    end_point = closest_point
+                    # Find indices and calculate shortest path
+                    start_index = path.index(start_point)
+                    end_index = path.index(end_point)
+                    shortest_path = find_shortest_path(path, start_index, end_index)
+                    selecting_target = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    adjusting = False
-                elif event.key == pygame.K_ESCAPE:
+                if event.key == pygame.K_ESCAPE:
                     pygame.quit()
                     return
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                mouse_pos = pygame.mouse.get_pos()
-                # Check if clicking start or destination
-                start_dist = sqrt((mouse_pos[0] - start_point[0])**2 + (mouse_pos[1] - start_point[1])**2)
-                dest_dist = sqrt((mouse_pos[0] - destination_point[0])**2 + (mouse_pos[1] - destination_point[1])**2)
-                
-                if start_dist < ROBOT_RADIUS * 2:
-                    dragging_start = True
-                elif dest_dist < DESTINATION_RADIUS * 2:
-                    dragging_destination = True
-            elif event.type == pygame.MOUSEBUTTONUP:
-                dragging_start = False
-                dragging_destination = False
-                
-        if dragging_start:
-            mouse_pos = pygame.mouse.get_pos()
-            closest_idx = find_closest_path_point(mouse_pos, path)
-            start_point = path[closest_idx]
-            
-        if dragging_destination:
-            mouse_pos = pygame.mouse.get_pos()
-            closest_idx = find_closest_path_point(mouse_pos, path)
-            destination_point = path[closest_idx]
         
-        # Draw setup screen
+        # Draw selection screen
         screen.fill(BACKGROUND_COLOR)
         
         # Draw path
         if len(path) > 1:
             pygame.draw.lines(screen, PATH_COLOR, False, path, 2)
         
-        # Draw start and destination
-        pygame.draw.circle(screen, ROBOT_COLOR, (int(start_point[0]), int(start_point[1])), ROBOT_RADIUS)
-        pygame.draw.circle(screen, DESTINATION_COLOR, (int(destination_point[0]), int(destination_point[1])), DESTINATION_RADIUS)
+        # Draw start point if selected
+        if start_point:
+            pygame.draw.circle(screen, (0, 255, 0), 
+                             (int(start_point[0]), int(start_point[1])), 
+                             DESTINATION_RADIUS)
         
         # Draw instructions
-        text = font.render("Drag to move start (red) and destination (blue). Press Enter to start.", True, (255, 255, 255))
+        text = font.render(
+            "Click to set start point" if start_point is None else "Click to set end point", 
+            True, (255, 255, 255)
+        )
         screen.blit(text, (10, 10))
         
         pygame.display.flip()
         clock.tick(60)
     
-    # Find indices in path
-    start_index = find_closest_path_point(start_point, path)
-    destination_index = find_closest_path_point(destination_point, path)
-    
-    # Create path segment from start to destination
-    if start_index <= destination_index:
-        active_path = path[start_index:destination_index+1]
-    else:
-        # Handle case where destination is before start in path
-        active_path = path[start_index:] + path[:destination_index+1]
-    
-    # Initialize robot position
-    robot_pos = active_path[0]
-    current_index = 0
-    target_index = 1 if len(active_path) > 1 else 0
-    destination_reached = False
-    
-    # Main simulation loop
+    # Robot movement simulation
+    robot_pos = start_point
+    current_path_index = 0
     running = True
+    
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -167,65 +186,62 @@ def main():
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.key == pygame.K_r:  # Reset
-                    robot_pos = active_path[0]
-                    current_index = 0
-                    target_index = 1 if len(active_path) > 1 else 0
-                    destination_reached = False
+                    robot_pos = start_point
+                    current_path_index = 0
         
-        # Clear screen
         screen.fill(BACKGROUND_COLOR)
         
-        # Draw full path (dimmed)
+        # Draw full path
         if len(path) > 1:
-            pygame.draw.lines(screen, (0, 100, 0), False, path, 1)
+            pygame.draw.lines(screen, PATH_COLOR, False, path, 2)
         
-        # Draw active path segment (bright)
-        if len(active_path) > 1:
-            pygame.draw.lines(screen, PATH_COLOR, False, active_path, 2)
+        # Draw shortest path in different color
+        if shortest_path and len(shortest_path) > 1:
+            pygame.draw.lines(screen, (255, 255, 0), False, shortest_path, 3)
         
-        # Move robot along path if not at destination
-        if not destination_reached and current_index < len(active_path) - 1:
-            # Current position and target
-            target_pos = active_path[target_index]
-            
-            # Calculate direction vector
-            dx = target_pos[0] - robot_pos[0]
-            dy = target_pos[1] - robot_pos[1]
+        # Draw start and end points
+        pygame.draw.circle(screen, (0, 255, 0), 
+                         (int(start_point[0]), int(start_point[1])), 
+                         DESTINATION_RADIUS)
+        pygame.draw.circle(screen, (255, 0, 0), 
+                         (int(end_point[0]), int(end_point[1])), 
+                         DESTINATION_RADIUS)
+        
+        # Move robot along path
+        if current_path_index < len(shortest_path) - 1:
+            target = shortest_path[current_path_index + 1]
+            dx = target[0] - robot_pos[0]
+            dy = target[1] - robot_pos[1]
             distance = sqrt(dx**2 + dy**2)
             
-            # If we've reached the target point, move to next target
             if distance < SPEED:
-                current_index += 1
-                if current_index == len(active_path) - 1:
-                    robot_pos = active_path[-1]
-                    destination_reached = True
-                else:
-                    target_index = current_index + 1
-                    robot_pos = active_path[current_index]
+                robot_pos = target
+                current_path_index += 1
             else:
-                # Normalize direction and move
                 dx = dx / distance * SPEED
                 dy = dy / distance * SPEED
                 robot_pos = (robot_pos[0] + dx, robot_pos[1] + dy)
         
-        # Draw destination
-        pygame.draw.circle(screen, DESTINATION_COLOR, (int(destination_point[0]), int(destination_point[1])), DESTINATION_RADIUS)
-        
         # Draw robot
-        pygame.draw.circle(screen, ROBOT_COLOR, (int(robot_pos[0]), int(robot_pos[1])), ROBOT_RADIUS)
+        pygame.draw.circle(screen, ROBOT_COLOR, 
+                         (int(robot_pos[0]), int(robot_pos[1])), 
+                         ROBOT_RADIUS)
         
-        # Display status
-        if destination_reached:
-            status_text = font.render("Destination reached! Press R to reset.", True, (255, 255, 255))
+        # Display status and progress
+        if current_path_index < len(shortest_path) - 1:
+            progress = (current_path_index / (len(shortest_path)-1)) * 100
+            status = f"Following path... {progress:.1f}%"
         else:
-            status_text = font.render("Robot moving to destination...", True, (255, 255, 255))
+            status = "Destination reached! Press R to reset"
+        
+        status_text = font.render(status, True, (255, 255, 255))
         screen.blit(status_text, (10, 10))
         
-        # Update display
         pygame.display.flip()
         clock.tick(60)
     
     pygame.quit()
+
 
 if __name__ == "__main__":
     main()
