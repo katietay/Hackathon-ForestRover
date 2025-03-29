@@ -6,8 +6,9 @@ class Algorithm:
         self.directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]  # 4-directional movement
 
     def heuristic(self, a: Tuple[int, int], b: Tuple[int, int]) -> float:
-        """Manhattan distance heuristic"""
-        return abs(a[0] - b[0]) + abs(a[1] - b[1])
+        """Euclidean distance heuristic"""
+        return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+
 
     def get_neighbors(self, pos: Tuple[int, int], grid: List[List[int]]) -> List[Tuple[int, int]]:
         """Returns valid neighboring positions"""
