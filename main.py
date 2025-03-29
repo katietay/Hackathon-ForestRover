@@ -1,78 +1,97 @@
+# main.py
 import pygame
 import sys
 from robot_class import Robot
 
-# Initialize Pygame
-pygame.init()
+def main():
+    # Initialize Pygame
+    pygame.init()
 
-# Set up the display
-WINDOW_SIZE = (800, 600)
-screen = pygame.display.set_mode(WINDOW_SIZE)
-pygame.display.set_caption("Robot Pathfinding")
+    # Set up the display
+    WINDOW_SIZE = (800, 600)
+    screen = pygame.display.set_mode(WINDOW_SIZE)
+    pygame.display.set_caption("Robot Pathfinding Test Case")
 
-# Colors
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GRAY = (128, 128, 128)
+    # Colors
+    WHITE = (255, 255, 255)
+    BLACK = (0, 0, 0)
+    GRAY = (128, 128, 128)
 
-# Grid settings
-GRID_SIZE = 32
-GRID_WIDTH = WINDOW_SIZE[0] // GRID_SIZE
-GRID_HEIGHT = WINDOW_SIZE[1] // GRID_SIZE
+    # Grid settings
+    GRID_SIZE = 32
+    GRID_WIDTH = WINDOW_SIZE[0] // GRID_SIZE
+    GRID_HEIGHT = WINDOW_SIZE[1] // GRID_SIZE
 
-# Create grid (0 = free space, 1 = obstacle)
-grid = [[0 for _ in range(GRID_HEIGHT)] for _ in range(GRID_WIDTH)]
+    # Create grid (0 = free space, 1 = obstacle)
+    grid = [[0 for _ in range(GRID_HEIGHT)] for _ in range(GRID_WIDTH)]
 
-# Add some example obstacles
-for x in range(5, 8):
-    for y in range(4, 7):
-        grid[x][y] = 1
+    # Create robot at starting position (2, 2)
+    robot = Robot(2 * GRID_SIZE, 2 * GRID_SIZE)
 
-# Create robot
-robot = Robot(GRID_SIZE, GRID_SIZE)  # Start at (1, 1) in grid coordinates
+    # Define start and end points
+    waypoints = [
+        (2, 2),     # Starting point (A)
+        (18, 14),   # Ending point (B)
+    ]
 
-# Game loop
-clock = pygame.time.Clock()
-running = True
+    # Set the waypoints for the robot
+    robot.set_waypoints(waypoints, grid)
 
-while running:
-    # Event handling
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            # Set new target for robot
-            mouse_pos = pygame.mouse.get_pos()
-            robot.move_to(mouse_pos, grid)
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                # Place/remove obstacle at mouse position
+    # Game loop
+    clock = pygame.time.Clock()
+    running = True
+    font = pygame.font.Font(None, 36)
+
+    while running:
+        # Event handling
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                # Add/remove obstacle at clicked position
                 mouse_pos = pygame.mouse.get_pos()
                 grid_x = mouse_pos[0] // GRID_SIZE
                 grid_y = mouse_pos[1] // GRID_SIZE
-                if 0 <= grid_x < GRID_WIDTH and 0 <= grid_y < GRID_HEIGHT:
+                if (grid_x, grid_y) not in waypoints:  # Don't place obstacles on waypoints
                     grid[grid_x][grid_y] = 1 - grid[grid_x][grid_y]  # Toggle obstacle
+                    # Recalculate path from current position when obstacle is added/removed
+                    robot.handle_obstacle_change(grid)
 
-    # Update
-    robot.update()
+        # Update
+        robot.update(grid)
 
-    # Draw
-    screen.fill(WHITE)
+        # Draw
+        screen.fill(WHITE)
 
-    # Draw grid and obstacles
-    for x in range(GRID_WIDTH):
-        for y in range(GRID_HEIGHT):
-            rect = pygame.Rect(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE)
-            if grid[x][y] == 1:  # Obstacle
-                pygame.draw.rect(screen, GRAY, rect)
-            pygame.draw.rect(screen, BLACK, rect, 1)  # Grid lines
+        # Draw grid and obstacles
+        for x in range(GRID_WIDTH):
+            for y in range(GRID_HEIGHT):
+                rect = pygame.Rect(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE)
+                if grid[x][y] == 1:  # Obstacle
+                    pygame.draw.rect(screen, GRAY, rect)
+                pygame.draw.rect(screen, BLACK, rect, 1)  # Grid lines
 
-    # Draw robot and path
-    robot.draw(screen)
+        # Draw robot and path
+        robot.draw(screen)
 
-    # Update display
-    pygame.display.flip()
-    clock.tick(60)
+        # Draw waypoint labels
+        labels = ['A', 'B']
+        for i, point in enumerate(waypoints):
+            text = font.render(labels[i], True, (0, 0, 255))
+            text_rect = text.get_rect(center=(point[0] * GRID_SIZE + 16, 
+                                            point[1] * GRID_SIZE + 16))
+            screen.blit(text, text_rect)
 
-pygame.quit()
-sys.exit()
+        # Draw instructions
+        info_text = font.render("Click to add/remove obstacles", True, BLACK)
+        screen.blit(info_text, (10, 10))
+
+        # Update display
+        pygame.display.flip()
+        clock.tick(60)
+
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
