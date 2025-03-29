@@ -5,11 +5,10 @@ from algorithm import Algorithm
 
 class Robot:
     def __init__(self, x, y):
-        print(f"Initializing Robot at position ({x}, {y})")
         self.x = x
         self.y = y
-        self.grid_x = x // 32
-        self.grid_y = y // 32
+        self.grid_x = x // 20  # Changed from 32 to 20
+        self.grid_y = y // 20  # Changed from 32 to 20
         self.speed = 2
         self.robot = pygame.Rect(x - 10, y - 10, 20, 20)
         self.algorithm = Algorithm()
@@ -22,11 +21,9 @@ class Robot:
         self.current_slope = 0
 
     def set_waypoints(self, points, grid):
-        print(f"Setting waypoints: {points}")
         self.waypoints = points
         # Start from the robot's current grid position
         current_pos = (self.grid_x, self.grid_y)
-        print(f"Current grid position: {current_pos}")
         self.current_target_index = 0
         
         # Don't recalculate path if we're already at the first waypoint
@@ -42,20 +39,15 @@ class Robot:
             current_pos = (self.grid_x, self.grid_y)
             target = self.waypoints[self.current_target_index]
             
-            print(f"Calculating path from {current_pos} to {target}")
-            
             new_path = self.algorithm.find_path(current_pos, target, grid)
             
             if new_path:
-                print(f"Found path with {len(new_path)} points: {new_path}")
                 self.current_path = new_path
                 self.current_waypoint = 0
                 self.has_path = True
             else:
-                print(f"No path found from {current_pos} to {target}!")
                 self.has_path = False
         else:
-            print("Reached final waypoint, no more targets.")
             self.has_path = False
 
     def update(self, grid):
@@ -63,15 +55,13 @@ class Robot:
             # Get target position in grid coordinates
             target_grid = self.current_path[self.current_waypoint]
             # Convert to pixel coordinates (center of grid cell)
-            target_x = target_grid[0] * 32 + 16
-            target_y = target_grid[1] * 32 + 16
+            target_x = target_grid[0] * 20 + 10  # Changed from 32 to 20
+            target_y = target_grid[1] * 20 + 10  # Changed from 32 to 20
 
             dx = target_x - self.x
             dy = target_y - self.y
             distance = math.sqrt(dx * dx + dy * dy)
 
-            print(f"Moving towards: {target_grid}, Distance: {distance}")
-            print(f"Current position: ({self.x}, {self.y}), Target: ({target_x}, {target_y})")
 
             if distance > self.speed:
                 # Normalize direction and apply speed
@@ -82,12 +72,12 @@ class Robot:
                 self.x += dx
                 self.y += dy
                 # Update grid position
-                self.grid_x = int(self.x // 32)
-                self.grid_y = int(self.y // 32)
+                self.grid_x = int(self.x // 20)  # Changed from 32 to 20
+                self.grid_y = int(self.y // 20)  # Changed from 32 to 20
                 
-                print(f"New position: ({self.x}, {self.y}), Grid: ({self.grid_x}, {self.grid_y})")
-                
-                self.robot = pygame.Rect(self.x - 10, self.y - 10, 20, 20)
+                # Adjust robot size to be proportional to grid size
+                robot_size = 10  # Half of old size to match smaller grid
+                self.robot = pygame.Rect(self.x - robot_size, self.y - robot_size, robot_size*2, robot_size*2)
 
                 # Update elevation
                 if 0 <= self.grid_x < grid.shape[0] and 0 <= self.grid_y < grid.shape[1]:
@@ -98,46 +88,42 @@ class Robot:
                         prev_grid = self.current_path[self.current_waypoint - 1]
                         self.current_slope = self.algorithm.get_slope(prev_grid, target_grid, grid)
             else:
-                print(f"Reached waypoint {self.current_waypoint}")
                 self.current_waypoint += 1
                 if self.current_waypoint >= len(self.current_path):
-                    print(f"Completed path to target {self.current_target_index}")
                     self.current_target_index += 1
                     self.recalculate_path_from_current(grid)
-        else:
-            if not self.has_path:
-                print("No valid path to follow")
-            elif self.current_waypoint >= len(self.current_path):
-                print(f"Reached end of current path segment")
+        
 
     def draw(self, screen, grid, path_color=(255, 0, 0), robot_color=(0, 0, 255)):
+        GRID_SIZE = 20  # Changed from 32 to 20
+        
         # Draw path with brighter color and thicker lines
         if self.has_path and len(self.current_path) > 1:
             for i in range(len(self.current_path) - 1):
-                start_pos = (self.current_path[i][0] * 32 + 16,
-                           self.current_path[i][1] * 32 + 16)
-                end_pos = (self.current_path[i+1][0] * 32 + 16,
-                          self.current_path[i+1][1] * 32 + 16)
-                pygame.draw.line(screen, path_color, start_pos, end_pos, 3)  # Thicker line
+                start_pos = (self.current_path[i][0] * GRID_SIZE + GRID_SIZE//2,
+                           self.current_path[i][1] * GRID_SIZE + GRID_SIZE//2)
+                end_pos = (self.current_path[i+1][0] * GRID_SIZE + GRID_SIZE//2,
+                          self.current_path[i+1][1] * GRID_SIZE + GRID_SIZE//2)
+                pygame.draw.line(screen, path_color, start_pos, end_pos, 2)  # Slightly thinner line for smaller grid
                 
                 # Add dots at path points for better visibility
-                pygame.draw.circle(screen, path_color, start_pos, 3)
+                pygame.draw.circle(screen, path_color, start_pos, 2)  # Smaller dots
             
             # Draw last point
-            last_pos = (self.current_path[-1][0] * 32 + 16,
-                       self.current_path[-1][1] * 32 + 16)
-            pygame.draw.circle(screen, path_color, last_pos, 3)
+            last_pos = (self.current_path[-1][0] * GRID_SIZE + GRID_SIZE//2,
+                       self.current_path[-1][1] * GRID_SIZE + GRID_SIZE//2)
+            pygame.draw.circle(screen, path_color, last_pos, 2)  # Smaller dot
 
         # Draw robot with customizable color
         pygame.draw.rect(screen, robot_color, self.robot)
         
         # Add a border around the robot for better visibility
         border = self.robot.copy()
-        border.inflate_ip(4, 4)
-        pygame.draw.rect(screen, (0, 0, 0), border, 2)
+        border.inflate_ip(2, 2)  # Smaller inflation for smaller robot
+        pygame.draw.rect(screen, (0, 0, 0), border, 1)  # Thinner border
         
         # Draw debug information with white background for better visibility
-        font = pygame.font.Font(None, 24)
+        font = pygame.font.Font(None, 20)  # Smaller font
         
         # Create position text
         pos_text = font.render(f"Pos: ({int(self.x)}, {int(self.y)}) Grid: ({self.grid_x}, {self.grid_y})", True, (0, 0, 0))
@@ -145,7 +131,7 @@ class Robot:
         
         # Create background for position text
         bg_rect = pos_rect.copy()
-        bg_rect.inflate_ip(10, 6)
+        bg_rect.inflate_ip(8, 4)  # Smaller inflation for smaller text
         pygame.draw.rect(screen, (255, 255, 255), bg_rect)
         pygame.draw.rect(screen, (0, 0, 0), bg_rect, 1)
         
@@ -160,7 +146,7 @@ class Robot:
             
             # Create background for target text
             bg_rect = target_rect.copy()
-            bg_rect.inflate_ip(10, 6)
+            bg_rect.inflate_ip(8, 4)  # Smaller inflation for smaller text
             pygame.draw.rect(screen, (255, 255, 255), bg_rect)
             pygame.draw.rect(screen, (0, 0, 0), bg_rect, 1)
             
@@ -174,11 +160,11 @@ class Robot:
         
         # Add a border around the robot for better visibility
         border = self.robot.copy()
-        border.inflate_ip(4, 4)
-        pygame.draw.rect(screen, (0, 0, 0), border, 2)
+        border.inflate_ip(2, 2)  # Smaller inflation for smaller robot
+        pygame.draw.rect(screen, (0, 0, 0), border, 1)  # Thinner border
         
         # Draw debug information with white background for better visibility
-        font = pygame.font.Font(None, 24)
+        font = pygame.font.Font(None, 20)  # Smaller font
         
         # Create position text
         pos_text = font.render(f"Pos: ({int(self.x)}, {int(self.y)}) Grid: ({self.grid_x}, {self.grid_y})", True, (0, 0, 0))
@@ -186,7 +172,7 @@ class Robot:
         
         # Create background for position text
         bg_rect = pos_rect.copy()
-        bg_rect.inflate_ip(10, 6)
+        bg_rect.inflate_ip(8, 4)  # Smaller inflation for smaller text
         pygame.draw.rect(screen, (255, 255, 255), bg_rect)
         pygame.draw.rect(screen, (0, 0, 0), bg_rect, 1)
         

@@ -1,7 +1,8 @@
-# algorithm.py
+# Modified algorithm.py
 import numpy as np
 import heapq
 import pygame
+from bresenham import bresenham
 
 class Algorithm:
     def __init__(self):
@@ -95,9 +96,81 @@ class Algorithm:
         elevation_diff = grid[pos2[0], pos2[1], 1] - grid[pos1[0], pos1[1], 1]
         return np.degrees(np.arctan2(abs(elevation_diff), distance))
 
-    def heuristic(self, a, b):
-        """A* heuristic"""
-        return np.sqrt((b[0] - a[0])**2 + (b[1] - a[1])**2)
+    def heuristic(self, a, b, grid=None):
+        """
+        A* heuristic with hybrid distance calculation.
+        Uses Euclidean by default, switches to Manhattan when navigating around obstacles.
+        
+        Parameters:
+        a: Current position (x, y)
+        b: Goal position (x, y)
+        grid: The terrain and obstacle grid
+        """
+        # Calculate direct Euclidean distance as baseline
+        euclidean_dist = np.sqrt((b[0] - a[0])**2 + (b[1] - a[1])**2)
+        
+        if grid is None:
+            return euclidean_dist
+        
+        # Check if there's a clear line of sight between current position and goal
+        if self.has_line_of_sight(a, b, grid):
+            # Use Euclidean distance when no obstacles in between
+            return euclidean_dist
+        else:
+            # Use Manhattan distance when navigating around obstacles
+            # Apply a small weight to favor paths that make progress toward goal
+            manhattan_dist = abs(b[0] - a[0]) + abs(b[1] - a[1])
+            return manhattan_dist * 1.1
+    
+    def has_line_of_sight(self, start, end, grid):
+        """
+        Check if there's a clear line of sight between start and end positions.
+        Uses Bresenham's line algorithm to check cells between points.
+        
+        Returns:
+        True if there's a clear path, False if obstacles or impassable terrain in the way
+        """
+        # Get all cells on the line using Bresenham's algorithm
+        line_cells = list(bresenham(start[0], start[1], end[0], end[1]))
+        
+        # Check each cell on the line
+        prev_cell = start
+        for cell in line_cells[1:]:  # Skip the starting cell
+            x, y = cell
+            
+            # Check boundaries
+            if not (0 <= x < grid.shape[0] and 0 <= y < grid.shape[1]):
+                return False
+                
+            # Check if cell is an obstacle or impassable
+            if grid[x, y, 0] == 1 or (x, y) in self.impassable_cells:
+                return False
+                
+            # Check if slope between cells is acceptable
+            if prev_cell != cell:  # Skip checking slope for the same cell
+                slope = self.get_slope(prev_cell, cell, grid)
+                if slope > self.max_slope:
+                    return False
+                    
+            prev_cell = cell
+            
+        return True
+
+    def find_direct_path(self, start, goal, grid):
+        """
+        Try to find a direct path between start and goal without A*.
+        Returns the path if possible, None otherwise.
+        """
+        if self.has_line_of_sight(start, goal, grid):
+            # Get path cells using Bresenham's algorithm
+            line_cells = list(bresenham(start[0], start[1], goal[0], goal[1]))
+            
+            # Store elevation profile for visualization
+            self.elevation_profile = [(pos, grid[pos[0], pos[1], 1]) for pos in line_cells]
+            
+            return line_cells
+        
+        return None
 
     def find_path(self, start, goal, grid):
         """Find a path using A* algorithm, avoiding steep terrain"""
@@ -109,6 +182,14 @@ class Algorithm:
             print(f"Start {start} or goal {goal} is in impassable terrain!")
             return None
             
+        # NEW: Try direct path first if possible
+        direct_path = self.find_direct_path(start, goal, grid)
+        if direct_path:
+            print("Direct path found!")
+            return direct_path
+            
+        print("Direct path not possible, using A* algorithm...")
+        
         # Standard A* implementation
         frontier = []
         heapq.heappush(frontier, (0, start))
@@ -138,7 +219,7 @@ class Algorithm:
                 
                 if next_pos not in cost_so_far or new_cost < cost_so_far[next_pos]:
                     cost_so_far[next_pos] = new_cost
-                    priority = new_cost + self.heuristic(goal, next_pos)
+                    priority = new_cost + self.heuristic(next_pos, goal, grid)
                     heapq.heappush(frontier, (priority, next_pos))
                     came_from[next_pos] = current
         

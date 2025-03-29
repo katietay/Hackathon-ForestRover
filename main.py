@@ -7,19 +7,21 @@ import os
 import random
 from algorithm import Algorithm
 
-print("Starting program...")
 
+# main.py
 def main():
-    print("Initializing Pygame...")
     pygame.init()
     
-    WINDOW_SIZE = (800, 600)
-    print("Creating window...")
+    # Updated Grid settings for smaller cells but more spaces
+    GRID_SIZE = 20  # Smaller grid cells (changed from 32)
+    GRID_WIDTH = 40  # More horizontal spaces
+    GRID_HEIGHT = 30  # More vertical spaces
+
+    WINDOW_SIZE = (GRID_WIDTH * GRID_SIZE, GRID_HEIGHT * GRID_SIZE)  # 800x600 window
     screen = pygame.display.set_mode(WINDOW_SIZE)
     pygame.display.set_caption("Robot Pathfinding with Elevation")
     
-    print("Setting up initial variables...")
-    # Colors - Brighter, more distinguishable colors
+    # Keep your existing color definitions...
     WHITE = (255, 255, 255)
     BLACK = (0, 0, 0)
     GRAY = (180, 180, 180)  # Lighter gray for obstacles
@@ -32,70 +34,55 @@ def main():
     CLIFF_COLOR = (128, 0, 0, 180)  # Darker, more transparent red for cliffs
     TREE_COLOR = (20, 120, 20)  # Dark green for trees
     ROCK_COLOR = (150, 150, 150)  # Gray for rocks
-
-    # Grid settings
-    GRID_SIZE = 32
-    GRID_WIDTH = WINDOW_SIZE[0] // GRID_SIZE
-    GRID_HEIGHT = WINDOW_SIZE[1] // GRID_SIZE
-    
-    # Maximum slope the robot can handle (in degrees)
-    MAX_SLOPE = 45
-
-    print("Creating grid...")
-    # Create 3D grid (x, y, [obstacle, elevation, obstacle_type])
-    # obstacle_type: 0=none, 1=wall, 2=tree, 3=rock
+    # Create grid with more spaces
     grid = np.zeros((GRID_WIDTH, GRID_HEIGHT, 3))
 
-    # Generate terrain with more pronounced elevation changes
+    # Adjust terrain generation for more detailed landscape
     for x in range(GRID_WIDTH):
         for y in range(GRID_HEIGHT):
-            # Use consistent elevation formula (using the one with smaller variations)
-            elevation = (np.sin(x/3) * np.cos(y/3) * 2) + 2
+            # Adjusted scale for more varied terrain
+            elevation = (np.sin(x/4) * np.cos(y/4) * 2) + 2
+            elevation += random.uniform(-0.2, 0.2)
             
-            # Add some random variation to make terrain more interesting
-            elevation += random.uniform(-0.3, 0.3)
-            
-            # Create a small valley or depression in one part of the map
+            # Adjust valley location and size
             center_x, center_y = GRID_WIDTH//3, GRID_HEIGHT//2
             dist = np.sqrt((x - center_x)**2 + (y - center_y)**2)
-            if dist < 5:
-                elevation -= (5 - dist) * 0.4  # Create depression
+            if dist < 8:  # Larger valley
+                elevation -= (8 - dist) * 0.3
                 
-            # Create a small hill in another part
+            # Adjust hill location and size
             hill_x, hill_y = 2*GRID_WIDTH//3, GRID_HEIGHT//3
             dist = np.sqrt((x - hill_x)**2 + (y - hill_y)**2)
-            if dist < 6:
-                elevation += (6 - dist) * 0.4  # Create hill
+            if dist < 10:  # Larger hill
+                elevation += (10 - dist) * 0.3
                 
             grid[x, y, 1] = elevation
 
-    # Add some predefined obstacles (walls)
-    for y in range(5, 12):
-        if y != 8:  # Leave a gap
-            grid[10, y, 0] = 1
-            grid[10, y, 2] = 1  # Wall type
+    # Adjust wall positions for new grid size
+    for y in range(8, 18):
+        if y != 13:  # Leave a gap
+            grid[15, y, 0] = 1
+            grid[15, y, 2] = 1
 
-    for x in range(5, 15):
-        if x != 12:  # Leave a gap
-            grid[x, 12, 0] = 1
-            grid[x, 12, 2] = 1  # Wall type
+    for x in range(8, 23):
+        if x != 18:  # Leave a gap
+            grid[x, 18, 0] = 1
+            grid[x, 18, 2] = 1
+
+    # Adjust number of trees and rocks for larger grid
+    num_trees = 20  # More trees
+    num_rocks = 12  # More rocks
     
-    # Add random trees and rocks
-    num_trees = 15
-    num_rocks = 10
-    
-    # Keep track of object positions for waypoint placement
     object_positions = []
-    
+    MAX_SLOPE = 45
     # Place trees
     for _ in range(num_trees):
         while True:
             x = random.randint(1, GRID_WIDTH-2)
             y = random.randint(1, GRID_HEIGHT-2)
-            # Make sure not to place on existing obstacles or too close to edges
             if grid[x, y, 0] == 0:
-                grid[x, y, 0] = 1  # Mark as obstacle
-                grid[x, y, 2] = 2  # Tree type
+                grid[x, y, 0] = 1
+                grid[x, y, 2] = 2
                 object_positions.append((x, y))
                 break
     
@@ -104,42 +91,73 @@ def main():
         while True:
             x = random.randint(1, GRID_WIDTH-2)
             y = random.randint(1, GRID_HEIGHT-2)
-            # Make sure not to place on existing obstacles
             if grid[x, y, 0] == 0:
-                grid[x, y, 0] = 1  # Mark as obstacle
-                grid[x, y, 2] = 3  # Rock type
+                grid[x, y, 0] = 1
+                grid[x, y, 2] = 3
                 object_positions.append((x, y))
                 break
 
-    # Create algorithm instance to compute impassable terrain
-    path_algorithm = Algorithm()
-    # Calculate the terrain that's too steep to traverse
-    impassable_cells = path_algorithm.calculate_impassable_terrain(grid)
-    print(f"Found {len(impassable_cells)} impassable cells due to steep terrain")
+    # Update tree drawing function for smaller grid size
+    def draw_tree(screen, x, y):
+        trunk_color = (101, 67, 33)
+        leaves_color = (0, 128, 0)
+        
+        # Adjusted for 20x20 grid
+        trunk_rect = pygame.Rect(x * GRID_SIZE + 8, y * GRID_SIZE + 10, 4, 10)
+        pygame.draw.rect(screen, trunk_color, trunk_rect)
+        
+        leaves_points = [
+            (x * GRID_SIZE + 10, y * GRID_SIZE + 3),  # Top
+            (x * GRID_SIZE + 3, y * GRID_SIZE + 12),  # Bottom left
+            (x * GRID_SIZE + 17, y * GRID_SIZE + 12)  # Bottom right
+        ]
+        pygame.draw.polygon(screen, leaves_color, leaves_points)
+    
+    # Update rock drawing function for smaller grid size
+    def draw_rock(screen, x, y):
+        rock_color = (130, 130, 130)
+        
+        center_x = x * GRID_SIZE + GRID_SIZE//2
+        center_y = y * GRID_SIZE + GRID_SIZE//2
+        radius = GRID_SIZE//2 - 2  # Slightly smaller radius
+        
+        points = []
+        num_points = 8
+        for i in range(num_points):
+            angle = 2 * np.pi * i / num_points
+            r = radius * (0.8 + random.random() * 0.4)
+            px = center_x + r * np.cos(angle)
+            py = center_y + r * np.sin(angle)
+            points.append((px, py))
+        
+        pygame.draw.polygon(screen, rock_color, points)
+        pygame.draw.line(screen, (160, 160, 160), 
+                        (center_x - 3, center_y - 3), 
+                        (center_x + 1, center_y - 1), 1)
 
-    print("Creating robot...")
-    # Initialize robot at starting position (in grid coordinates)
-    # Choose a starting point that's not on impassable terrain
+    path_algorithm = Algorithm()
+    impassable_cells = path_algorithm.calculate_impassable_terrain(grid)
+
+    # Initialize robot with adjusted grid size
     while True:
         start_grid_x = random.randint(2, GRID_WIDTH//4)
         start_grid_y = random.randint(2, GRID_HEIGHT//4)
         if grid[start_grid_x, start_grid_y, 0] == 0 and (start_grid_x, start_grid_y) not in impassable_cells:
             break
             
+    # Convert grid coordinates to pixel coordinates (center of grid cell)
     start_x = start_grid_x * GRID_SIZE + GRID_SIZE // 2
     start_y = start_grid_y * GRID_SIZE + GRID_SIZE // 2
     robot = Robot(start_x, start_y)
     
-    # Choose a destination waypoint that doesn't overlap with obstacles
+    # Choose destination with adjusted grid size
     while True:
         end_grid_x = random.randint(3*GRID_WIDTH//4, GRID_WIDTH-2)
         end_grid_y = random.randint(3*GRID_HEIGHT//4, GRID_HEIGHT-2)
         if grid[end_grid_x, end_grid_y, 0] == 0 and (end_grid_x, end_grid_y) not in impassable_cells:
             break
     
-    # Set waypoints (in grid coordinates)
     waypoints = [(start_grid_x, start_grid_y), (end_grid_x, end_grid_y)]
-    print(f"Setting waypoints: {waypoints}")
     robot.set_waypoints(waypoints, grid)
     
     def get_elevation_color(elevation):
@@ -194,8 +212,6 @@ def main():
         pygame.draw.line(screen, (160, 160, 160), 
                          (center_x - 5, center_y - 5), 
                          (center_x + 2, center_y - 2), 2)
-
-    print("Starting main loop...")
     clock = pygame.time.Clock()
     running = True
     font = pygame.font.Font(None, 36)
@@ -429,10 +445,8 @@ def main():
         pygame.display.flip()
         clock.tick(60)
 
-    print("Quitting...")
     pygame.quit()
     sys.exit()
 
 if __name__ == "__main__":
-    print("Starting main()...")
     main()
